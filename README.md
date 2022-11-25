@@ -1,0 +1,1 @@
+## Riot api study readme
