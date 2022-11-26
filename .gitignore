@@ -13,6 +13,7 @@ __pycache__/
 credentials.json
 token.json
 svc.json
+.env
 # Distribution / packaging
 .Python
 build/
