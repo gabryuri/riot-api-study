@@ -1,15 +1,16 @@
 import json
 from datetime import datetime
-import json
+from models.match_timeline_models import MatchTimeLine
 
 
 class Match:
-    def __init__(self, log, player_of_interest, match_dict):
+    def __init__(self, log, player_of_interest, match_dict, timeline_dict):
         self.player_of_interest = player_of_interest
         self.log = log
         for key, value in match_dict.items():
             setattr(self, key, value)
-
+        self.player_mappings = {}
+        
         self.friends_dict = {
             "DfSSu4EsE4ztxtTbLjiGRqTv1HVbO9bD9UeKVCyJnfnTPy7P_44SOzafM36wugh09nsGLVHaUtvb7A": "Azeros",
             "G1rqK5LK-CViiRQKAzqGsbtcoSSG_Qneu_hX9fzH2Cys1xMdjzgnUl09i1gqxVdpv0NLCF5jm7DypA": "gabrinho",
@@ -40,31 +41,56 @@ class Match:
         self.get_teams_info()
         self.get_teams_info_as_cols()
         self.get_known_players()
+        if timeline_dict:
+            self.match_timeline = MatchTimeLine(log, timeline_dict, self.player_mappings)
 
-    def get_data_as_list(
-        self,
-        columns=[
-            "player_of_interest",
-            "win",
-            "queue",
-            "ally_position_of_interest",
-            "ally_matchup_of_interest",
-            "enemy_matchup_of_interest",
-        ],
-    ):
+
+
+
+    def get_data_as_list(self):
+        columns = [
+        "player_of_interest",
+        "match_id",
+        "amount_of_known_players",
+        "known_players",
+        "win",
+        "queue",
+        "match_timestamp",
+        "ally_top",
+        "enemy_top",
+        "ally_jungle",
+        "enemy_jungle",
+        "ally_middle",
+        "enemy_middle",
+        "ally_bottom",
+        "enemy_bottom",
+        "ally_utility",
+        "enemy_utility",
+        "time_in_seconds",
+        "time_in_minutes_decimal",
+        "remake"
+    ]
+
         data = []
-        for column in columns:
-            column_data = self.__dict__.get(column)
-            if isinstance(column_data, dict):
-                data.append(json.dumps(column_data))
-            elif isinstance(column_data, bool):
-                data.append(str(column_data))
-            else:
-                data.append(column_data)
-        return data
+        for classic_columns in columns:
+            column_data = self.__dict__.get(classic_columns)
+            data.append(str(column_data))
+
+        final_data = []
+        for frame in self.match_timeline.recorded_frames:
+            data_to_append = data+frame.timeline_data_list
+            final_data.append(data_to_append)
+        
+        if self.match_timeline:
+            self.log.info('Contains timeline - creating timeline records')
+            frame_cols = self.match_timeline.recorded_frames[0].timeline_column_list
+            columns.extend(frame_cols)
+
+        
+        return final_data, columns
 
     def calculate_basic_attributes(self):
-        self.timestamp = datetime.fromtimestamp(
+        self.match_timestamp = datetime.fromtimestamp(
             self.info.get("gameCreation") / 1000
         ).strftime("%Y-%m-%d %H:%M:%S")
         self.queue = self.queues_dict.get(self.info.get("queueId"))
@@ -83,15 +109,16 @@ class Match:
 
     def get_teams_info(self):
         team_info_dict = {self.teams[0]: {}, self.teams[1]: {}}
-
+        # self.log.info(self.info.get("participants"))
         for participant in self.info.get("participants"):
             player_dict = {}
             player_dict["name"] = participant.get("summonerName")
             player_dict["champion"] = participant.get("championName")
-            player_dict["turretPlatesTaken"] = participant.get("challenges").get(
-                "turretPlatesTaken"
-            )
-            player_dict["soloKills"] = participant.get("challenges").get("soloKills")
+            player_dict["participantId"] = participant.get("participantId")
+            # player_dict["turretPlatesTaken"] = participant.get("challenges").get(
+            #     "turretPlatesTaken"
+            # )
+            # player_dict["soloKills"] = participant.get("challenges").get("soloKills")
 
             team_info_dict[participant.get("teamId")][
                 participant.get("teamPosition")
@@ -111,12 +138,11 @@ class Match:
                     attribute_name = f"{team.lower()}_{role.lower()}"
                     try:
                         attribute_value = self.teams_info.get(team).get(role).get("champion")
+                        self.player_mappings[self.teams_info.get(team).get(role).get("participantId")] = attribute_name
                     except: 
                         attribute_value = self.teams_info.get(team).get('').get("champion")
-                    self.log.info(f'setting attribute {attribute_name} with value {attribute_value}')
+                    # self.log.info(f'setting attribute {attribute_name} with value {attribute_value}')
                     setattr(self, attribute_name, attribute_value)
-            
-
 
     def get_known_players(self):
         players = self.metadata.get("participants")
@@ -164,3 +190,5 @@ class Match:
             .get(self.ally_position_of_interest)
             .get("champion")
         )
+
+

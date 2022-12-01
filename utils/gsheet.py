@@ -26,7 +26,8 @@ def get_service_client():
 def get_dataset(logger,
                 spreadsheet_id: str,
                 range: str,
-                schema=None):
+                schema=None,
+                raw_list=False):
 
     """
     Return a dataframe from google sheet.
@@ -46,10 +47,12 @@ def get_dataset(logger,
                          
         values = result.get('values', [])
 
+        if raw_list:
+            return [value[0] for value in values]
+
         if (len(values) <= 1 and schema is None) or (len(values) == 0):
             return pd.DataFrame({'A' : []})
 
-        logger.info(f'Schema: {schema}')
         norm_values = normalize_dataset(dataset=values, schema=schema)
 
         if schema is not None:
@@ -58,7 +61,6 @@ def get_dataset(logger,
             df = pd.DataFrame(norm_values[1:], columns=norm_values[0])
 
         logger.info('Read %s rows' % len(values))
-        logger.info('Schema:')
 
     except Exception as e:
         logger.info('Error: %', str(e))
@@ -119,10 +121,22 @@ def to_string(u):
     else:
         return str(u)
 
+def check_has_data(sheet_id, sheet_page, log):
+    log.info(f'checking if {sheet_page} has data')
+    try:
+        df = get_dataset(logger=log, spreadsheet_id=sheet_id, range=sheet_page)
+        return df.shape[0] > 0 
+    except Exception as e:
+        log.info(f'Your dataset might have no data, has_data = False. Gsheet API Call Error: {e}')
+    return False
+
+
 
 def gsheets_data_dump(
-    df: pd.DataFrame, spreadsheet_id: str, range_sheet: str,
-        ord_cols= None, title: bool = True, clear: bool = True, create_sheet: bool = False) -> int:
+    df: pd.DataFrame, spreadsheet_id: str, range_sheet: str, logger,
+        title: bool = True,
+        clear: bool = False,
+        mode='full') -> int:
     """
     Função de data dump em uma planilha do Google Spreadsheets
     COMPARTILHAR SHEET COM openreports@ifood-data-platform.iam.gserviceaccount.com com permissão para editar.
@@ -136,16 +150,6 @@ def gsheets_data_dump(
     create_sheet -> booleano indicando se deseja que seja criada uma nova sheet, caso não exista (default False)
     )
     """
-    ord_cols = ord_cols or []
-    colunas = df.columns
-
-    # verificacao parametros
-    if len(ord_cols) > 0:
-        for c in ord_cols:
-            if c not in colunas:
-                print(c + ' nao faz parte do df')
-                return -1
-
     sheet = get_service_client()
 
     sheet_name = range_sheet.split('!')[0]
@@ -153,43 +157,69 @@ def gsheets_data_dump(
     sheet_exists_res = sheet_exists(spreadsheet_id, sheet_name)
     
     # verificação sheet exists
-    if (sheet_exists_res == False) and (create_sheet == False):
-        print('Sheet {} não existe.'.format(sheet_name))
-        return -1
-    elif sheet_exists_res == False:
-        print(create_tab(spreadsheet_id, sheet_name))
+    if sheet_exists_res == False:
+        logger.info(create_tab(spreadsheet_id, sheet_name))
 
     # limpeza da sheet a ser feito o update
     if clear:
         clear_values_request_body = {}
         request = sheet.values().clear(spreadsheetId=spreadsheet_id, range=range_sheet +
                                        ':ZZ', body=clear_values_request_body).execute()
-    else:
-        print('Não será limpo seu sheet, cuidado com valores indesejados!!')
+        logger.info(f'Sheet cleared: {request}')
 
-    ordenacao = False
-    win = []
-    if len(ord_cols) > 0:
-        ordenacao = True
-        for c in ord_cols:
-            win.append(col(c).asc())
-
-    if ordenacao:
-        df = df.orderBy(win)
-
-    lista = eval(json.dumps([list(to_string(val) for val in row) for row in df.values]))
+    data_to_write = eval(json.dumps([list(to_string(val) for val in row) for row in df.values]))
 
     if title:
-        lista = [df.columns.tolist()] + lista
+        has_data = check_has_data(spreadsheet_id, sheet_name, logger)
+        logger.info(f'has data: {has_data}')
+        if has_data:
+            pass
+        else:
+            data_to_write = [df.columns.tolist()] + data_to_write
 
     body = {
-        "values": lista
+        "values": data_to_write
     }
 
-
-    result = sheet.values().update(spreadsheetId=spreadsheet_id, range=range_sheet,
-                                   valueInputOption='RAW', body=body).execute()
-    print(result)
+    if mode == 'full':
+        result = sheet.values().update(spreadsheetId=spreadsheet_id, range=range_sheet,
+                                    valueInputOption='RAW', body=body).execute()
+    if mode == 'append':
+        result = sheet.values().append(spreadsheetId=spreadsheet_id, range=range_sheet,
+                                    valueInputOption='RAW', body=body).execute()
+    logger.info(f'Google sheets API result: {result}')
 
     return 0
 
+
+def list_write(data,
+        spreadsheet_id: str,
+        range_sheet: str, logger,
+        clear: bool = False,
+        mode='full'):
+    
+    sheet = get_service_client()
+    sheet_name = range_sheet.split('!')[0]
+
+    sheet_exists_res = sheet_exists(spreadsheet_id, sheet_name)
+    
+    # verificação sheet exists
+    if sheet_exists_res == False:
+        logger.info(create_tab(spreadsheet_id, sheet_name))
+    
+    if clear:
+        clear_values_request_body = {}
+        request = sheet.values().clear(spreadsheetId=spreadsheet_id, range=range_sheet +
+                                       ':ZZ', body=clear_values_request_body).execute()
+        logger.info(f'Sheet cleared: {request}')
+    
+    body = {
+        "values": [[value] for value in data]
+    }
+
+    if mode == 'full':
+        result = sheet.values().update(spreadsheetId=spreadsheet_id, range=range_sheet,
+                                    valueInputOption='RAW', body=body).execute()
+    if mode == 'append':
+        result = sheet.values().append(spreadsheetId=spreadsheet_id, range=range_sheet,
+                                    valueInputOption='RAW', body=body).execute()
