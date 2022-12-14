@@ -26,7 +26,7 @@ def main(player, sheet_plan, sheet_id):
                           sheet_plan=sheet_plan,
                           sheet_id=sheet_id,
                           log=log)
-    # match_sheet_range = 'gabrinho_2021-12-01_2022-12-01_Q420'
+    #match_sheet_range = 'gabrinho_2021-12-01_2022-12-01_Q420'
     matches = get_dataset(logger=log, spreadsheet_id=sheet_id, range=match_sheet_range, raw_list=True)
 
     for match in matches:
@@ -74,7 +74,7 @@ def get_puuid_from_playername(playername, log):
 
 def get_matches(playername=None,
                 end_date=None,
-                interval_in_days=365,
+                interval_in_days=1300,
                 sheet_plan=None,
                 sheet_id=None,
                 log=None,

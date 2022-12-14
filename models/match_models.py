@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from models.match_timeline_models import MatchTimeLine
-
+from utils.common_functions import deep_get
 
 class Match:
     def __init__(self, log, player_of_interest, match_dict, timeline_dict):
@@ -109,16 +109,13 @@ class Match:
 
     def get_teams_info(self):
         team_info_dict = {self.teams[0]: {}, self.teams[1]: {}}
-        # self.log.info(self.info.get("participants"))
+
         for participant in self.info.get("participants"):
             player_dict = {}
             player_dict["name"] = participant.get("summonerName")
             player_dict["champion"] = participant.get("championName")
             player_dict["participantId"] = participant.get("participantId")
-            # player_dict["turretPlatesTaken"] = participant.get("challenges").get(
-            #     "turretPlatesTaken"
-            # )
-            # player_dict["soloKills"] = participant.get("challenges").get("soloKills")
+            player_dict["turretPlatesTaken"] = deep_get(participant, 'challenges.turretPlatesTaken') 
 
             team_info_dict[participant.get("teamId")][
                 participant.get("teamPosition")
@@ -129,7 +126,6 @@ class Match:
         self.teams_info = team_info_dict
 
     def get_teams_info_as_cols(self):
-        # self.log.info(f'attributes {self.teams_info}')
         if self.info.get('gameMode') == 'CLASSIC':
             roles = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY']
             teams = list(self.teams_info.keys())
@@ -137,11 +133,11 @@ class Match:
                 for role in roles:
                     attribute_name = f"{team.lower()}_{role.lower()}"
                     try:
-                        attribute_value = self.teams_info.get(team).get(role).get("champion")
-                        self.player_mappings[self.teams_info.get(team).get(role).get("participantId")] = attribute_name
+                        attribute_value = deep_get(self.teams_info, f'{team}.{role}.champion')
+
+                        self.player_mappings[deep_get(self.teams_info, f'{team}.{role}.participantId')] = attribute_name
                     except: 
-                        attribute_value = self.teams_info.get(team).get('').get("champion")
-                    # self.log.info(f'setting attribute {attribute_name} with value {attribute_value}')
+                        attribute_value =  deep_get(self.teams_info, f'{team}..champion')
                     setattr(self, attribute_name, attribute_value)
 
     def get_known_players(self):
