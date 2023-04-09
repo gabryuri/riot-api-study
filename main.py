@@ -19,33 +19,39 @@ logging.basicConfig(
 log = logging.getLogger()
 
 
-def main(player, sheet_plan, sheet_id):
+def main(player, sheet_plan, sheet_id, dry_run=False):
     
 
-    match_sheet_range = get_matches(playername=player,
-                          sheet_plan=sheet_plan,
-                          sheet_id=sheet_id,
-                          log=log)
+    # match_sheet_range = get_matches(playername=player,
+    #                       sheet_plan=sheet_plan,
+    #                       sheet_id=sheet_id,
+    #                       log=log)
     #match_sheet_range = 'gabrinho_2021-12-01_2022-12-01_Q420'
-    matches = get_dataset(logger=log, spreadsheet_id=sheet_id, range=match_sheet_range, raw_list=True)
+    if dry_run:
+        matches = ['BR1_2627563488']
+    else:
+        matches = get_dataset(logger=log, spreadsheet_id=sheet_id, range=match_sheet_range, raw_list=True)
+
 
     for match in matches:
         time.sleep(2)
         match_info_suffix = f"lol/match/v5/matches/{match}"
         match_timeline_suffix = f"lol/match/v5/matches/{match}/timeline"
 
-        match_info_url = generate_url(url_base_americas, match_info_suffix)
-        match_data = retrieve_data(log=log, url=match_info_url)
 
-        match_timeline_url = generate_url(url_base_americas, match_timeline_suffix)
-        match_timeline_data = retrieve_data(log=log, url=match_timeline_url)
         
+        if dry_run:
+            with open('tests/fixtures/timeline.json') as file:
+                match_timeline_data = json.load(file)
 
-        # with open('timeline.json') as file:
-        #     match_timeline_data = json.load(file)
+            with open('tests/fixtures/match.json') as file:
+                match_data = json.load(file)
+        else: 
+            match_info_url = generate_url(url_base_americas, match_info_suffix)
+            match_data = retrieve_data(log=log, url=match_info_url)
 
-        # with open('match.json') as file:
-        #     match_data = json.load(file)
+            match_timeline_url = generate_url(url_base_americas, match_timeline_suffix)
+            match_timeline_data = retrieve_data(log=log, url=match_timeline_url)
 
         match = Match(log, player, match_data, match_timeline_data)
         parsed_data, cols = match.get_data_as_list()
@@ -59,7 +65,7 @@ def main(player, sheet_plan, sheet_id):
         range_sheet=f"{sheet_plan}!A1",
         logger=log,
         title=True,
-        mode='append'
+        mode='full'
     )
    
 
@@ -115,6 +121,7 @@ if __name__ == "__main__":
 
     main(
         player="gabrinho",
-        sheet_plan="gabrilo_01_dez",
+        sheet_plan="gabrilo_15_dez",
         sheet_id="1X0HhoMvn0YvVX2wQoKw-wHt7HGm2bEBVY6C-pfqsK5o",
+        dry_run=True
     )
